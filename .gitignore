@@ -22,6 +22,11 @@ var/
 .installed.cfg
 *.egg
 
+# Virtualenv
+include/
+lib/
+local/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
