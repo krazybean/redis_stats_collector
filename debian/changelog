@@ -1,0 +1,5 @@
+redis_stats (0.1-1) unstable; urgency=low
+
+  * Initial base release
+
+ -- Cloud-Database <clouddb-dev@lists.rackspace.com>  Fri, 19 Feb 2015 22:00:00 +0200
