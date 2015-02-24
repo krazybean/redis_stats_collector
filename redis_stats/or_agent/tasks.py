@@ -18,7 +18,7 @@ class StatTask(Task):
     def stats_db_connection(self):
         """Returns an authenticated connection to the stats database"""
         if not self._stats_db_connection:
-            stats_connection = pymongo.MongoClient(config.DB_HOSTS)
+            #stats_connection = pymongo.MongoClient(config.DB_HOSTS)
             stats_db_connection = stats_connection[config.DB_NAME]
             stats_db_connection.authenticate(config.DB_USER, config.DB_PASS)
             self._stats_db_connection = stats_db_connection
