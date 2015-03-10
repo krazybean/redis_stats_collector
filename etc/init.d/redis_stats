@@ -10,9 +10,9 @@
 # Description:       The collector.py will run collection gathering on interval and ship to OR
 ### END INIT INFO
  
-DIR=/usr/local/bin/redis_stats_collector
-DAEMON=$DIR/collector.py
-DAEMON_NAME=redis_stats
+DIR=/usr/local/bin/redis_stats_collector/redis_stats/
+DAEMON=$DIR/runner.py
+DAEMON_NAME=redisstats
  
 DAEMON_OPTS=""
  

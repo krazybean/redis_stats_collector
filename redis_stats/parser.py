@@ -1,102 +1,127 @@
+import sys
 import json
 import requests
+import tasks
+import config
+import logging
+from celery_stats import StatsWorker
+from mongo_conn import data_setup
+from pprint import pprint
 from bson import json_util
 from datetime import datetime
-from pprint import pprint
 from collections import OrderedDict
+from logging.handlers import RotatingFileHandler
 
-# Change to configs
-redskull_host = "localhost"
-redskull_host = "cdbp-n01.prod.iad3.clouddb.rackspace.net"
+# Logging section
+LOG_LEVEL = config.LOG_LEVEL
+root_logger = logging.getLogger()
+root_logger.setLevel(LOG_LEVEL)
+formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s')
+file_handler = RotatingFileHandler(config.LOG_FILE,
+                                   maxBytes=config.LOG_MAX_SIZE,
+                                   backupCount=config.LOG_RETENTION)
+file_handler.setFormatter(formatter)
+root_logger.addHandler(file_handler)
+
+dryrun = None
+if '--dry-run' in sys.argv:
+    dryrun = True
+
 
 class RedisParser:
     """ Single script to pull dataset and restructure """
 
+    def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.setLevel(LOG_LEVEL)
+        # Iterator: Remove tag after purchase.
+        self.MAX = 1
+
     def capture_redskull(self):
         """ Connection to redskull, #TODO need to clean this up """
         try:
-            r = requests.get('http://{0}:8000/api/knownpods'.format(redskull_host))
+            r = requests.get(config.REDSKULL_HOST)
         except requests.exceptions.ConnectionError:
-            raise Exception("ParserError: Unable to find broadcasted redskull host")
+            raise Exception("ParserError: Unable to find redskull host.")
         if r.status_code != 200:
-            raise Exception("ParserError: Recieved non-200 response from redskull")
+            raise Exception("ParserError: Recieved non-200 response.")
         return json.loads(r.content)
 
-    def format_results(self,
-                       datablock=None,
-                       instname=None,
-                       interval_segment=None,
-                       loopname=None):
+    def format_results(self, category=None, interval_segment=None):
         """ Formatting each stat into its own object """
-        if not datablock:
+        if not category or not interval_segment:
             return
-        wrapper = {}
-        if len(datablock) > 1:
-            for dataitem in datablock:
-                segment = OrderedDict()
-                values = {}
-                segment['host'] = instname
-                segment['entries'] = 1
-                segment[interval_segment] = datetime.utcnow()
-                structure = ("redis", "info", loopname, dataitem)
-                segment['name'] = ('.').join(structure)
-                values[0] = datablock[dataitem]
-                segment['total'] = datablock[dataitem]
-                segment['values'] = values
-            wrapper[segment['name']] = segment
-        return json.dumps(wrapper, default=json_util.default)
+        try:
+            static_time = datetime.utcnow()
+            datetime_minute = static_time.replace(second=0, microsecond=0)
+            datetime_hour = datetime_minute.replace(minute=0)
+            rsdata = self.capture_redskull()
+            outline = {}
+            for data in rsdata['Data'][:self.MAX]:
+                try:
+                    for cat in category:
+                        for subcat in category[cat]:
+                            if cat == 'stats':
+                                datablock = data['Master'].get(subcat,
+                                                               0)
+                            else:
+                                datablock = data['Master']['Info'].get(subcat,
+                                                                       0)
+                            if len(datablock) > 1:
+                                for dataitem in datablock:
+                                    segment = OrderedDict()
+                                    values = {}
+                                    segment['host'] = data['Name']
+                                    segment['entries'] = 1
+                                    segment[interval_segment] = static_time
+                                    structure = ("redis",
+                                                 cat,
+                                                 subcat,
+                                                 dataitem)
+                                    segment['name'] = ('.').join(structure)
+                                    if datablock[dataitem] == "":
+                                        values["0"] = int(0)
+                                    else:
+                                        values["0"] = datablock[dataitem]
+                                    segment['total'] = datablock[dataitem]
+                                    segment['values'] = values
+                                    tag = "{0}.{1}".format(segment['host'],
+                                                           str(static_time))
+                                    outline[tag] = segment
+                                    if not dryrun:
+                                        ds = data_setup()
+                                        ds.insert(segment)
+                                        sw = StatsWorker()
+                                        print sw.add_data_point(segment['host'],
+                                                          "redis_type",
+                                                          segment['name'],
+                                                          datablock[dataitem],
+                                                          static_time,
+                                                          0,
+                                                          0)
+#                                        print tasks.update_hour_stat.delay(segment)
+#                                    print json.dumps(segment,
+#                                                     default=json_util.default)
+                except KeyError:
+                    self.logger.error("Failed {0}: {1}".format(cat, subcat))
+                    pass
+        except TypeError as te:
+            self.logger.error("Missing category in results: {0}".format(category))
+        return outline
 
-    def main_parse(self):
+    def main_parse(self, interval_segment='hour'):
         """ Partytime at jcru's house """
-        stat_categories = ['LatencyHistory']
-        info_categories = ['Client', 'Memory', 'Stats', 'Persistence', 'Commandstats']
-        MAX = 1
-        interval_segment = 'minute'
-        rsdata = self.capture_redskull()
-        print type(rsdata)
-        for data in rsdata['Data'][:MAX]:
-            outline = []
-            try:
-                body = {}
-                instname = data['Name']
-                body['host'] = instname
-                # Iterate through Info: 
-                for info in info_categories:
-                    infoblock = data['Master']['Info'][info]
-                    #print self.format_results(infoblock, instname, loopname=data)
-                    if len(infoblock) > 1:
-                        for infoitem in infoblock:
-                            segment = OrderedDict()
-                            values = {}
-                            segment['host'] = body['host']
-                            segment['entries'] = 1
-                            segment[interval_segment] = datetime.utcnow()
-                            structure = ("redis", "info", info, infoitem)
-                            segment['name'] = ('.').join(structure)
-                            values[0] = infoblock[infoitem]
-                            segment['total'] = infoblock[infoitem]
-                            segment['values'] = values
-                            print json.dumps(segment, default=json_util.default)
-                # Iterate through higher elements
-                for stat in stat_categories:
-                    statblock = data['Master'][stat]
-                    if len(statblock) > 1:
-                        for statitem in statblock:
-                            segment = OrderedDict()
-                            values = {}
-                            segment['host'] = body['host']
-                            segment['entries'] = 1
-                            segment[interval_segment] = datetime.utcnow()
-                            structure = ("redis", stat, statitem)
-                            segment['name'] = ('.').join(structure)
-                            values[0] = statblock[statitem]
-                            segment['total'] = statblock[statitem]
-                            segment['values'] = values
-                            print json.dumps(segment, default=json_util.default)
-            except KeyError:
-                print "No stats for Stat.{0}".format(stat)
-                pass
-        
+        categories = {'stats': ['LatencyHistory'],
+                      'info': ['Client',
+                               'Memory',
+                               'Stats',
+                               'Persistence',
+                               'Commandstats']}
+        return self.format_results(categories, interval_segment)
+
+
 if __name__ == '__main__':
     p = RedisParser()
-    print p.main_parse()
+    result = p.main_parse()
+    for line in result:
+        pprint(json.dumps(result[line], default=json_util.default))
