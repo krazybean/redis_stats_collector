@@ -1,0 +1,3 @@
+/etc/redisstats/
+/var/lib/redisstats/
+/var/log/redisstats/

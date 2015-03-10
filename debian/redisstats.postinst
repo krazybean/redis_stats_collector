@@ -1,0 +1,8 @@
+#!/bin/sh -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd cdbproxy > /dev/null 2>&1; then
+        adduser --system --home /var/lib/redisstats --no-create-home --shell /bin/bash redisstats
+    fi
+    chown -R redisstats:root /var/lib/redisstats /var/log/redisstats /etc/redisstats
+fi
