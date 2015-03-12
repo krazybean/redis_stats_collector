@@ -35,7 +35,7 @@ class RedisParser:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(LOG_LEVEL)
         # Iterator: Remove tag after purchase.
-        self.MAX = 1
+        self.MAX = 3
 
     def capture_redskull(self):
         """ Connection to redskull, #TODO need to clean this up """
@@ -92,22 +92,21 @@ class RedisParser:
                                         ds = data_setup()
                                         ds.insert(segment)
                                         sw = StatsWorker()
-                                        print sw.add_data_point(segment['host'],
+                                        sw.add_data_point(segment['host'],
                                                           "redis_type",
                                                           segment['name'],
                                                           datablock[dataitem],
                                                           static_time,
                                                           0,
                                                           0)
-#                                        print tasks.update_hour_stat.delay(segment)
-#                                    print json.dumps(segment,
-#                                                     default=json_util.default)
                 except KeyError:
                     self.logger.error("Failed {0}: {1}".format(cat, subcat))
                     pass
         except TypeError as te:
-            self.logger.error("Missing category in results: {0}".format(category))
-        return outline
+            self.logger.error("Missing category results: {0}".format(category))
+            pass
+        finally:
+            return outline
 
     def main_parse(self, interval_segment='hour'):
         """ Partytime at jcru's house """
@@ -123,5 +122,4 @@ class RedisParser:
 if __name__ == '__main__':
     p = RedisParser()
     result = p.main_parse()
-    for line in result:
-        pprint(json.dumps(result[line], default=json_util.default))
+    pprint(json.dumps(result[line], default=json_util.default))
