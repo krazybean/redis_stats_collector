@@ -114,7 +114,7 @@ class RedisParser:
                 except KeyError:
                     self.logger.error("Failed Parent {0}: {1}".format(cat, subcat))
                     pass
-        except KeyboardInterrupt as te:
+        except TypeError as te:
             self.logger.error("Missing category results: {0}".format(category[cat]))
         return outline
 
@@ -132,5 +132,3 @@ class RedisParser:
 if __name__ == '__main__':
     p = RedisParser()
     result = p.main_parse()
-#    for line in result:
-#        pprint(json.dumps(result[line], default=json_util.default))
