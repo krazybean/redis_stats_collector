@@ -34,7 +34,6 @@ class StatsWorker:
         cached_metric = self._metric_cache[metric_name]
         datetime_day = datetime_hour.replace(hour=0)
 
-        print "Hour updated"
         hour_entries = cached_metric['hour_entries']
         hour_total = cached_metric['hour_total']
 
@@ -46,10 +45,10 @@ class StatsWorker:
         update_predicate = {'host': hostname,
                             'hour': datetime_hour,
                             'name': metric_name}
-        update_action = {'$set': {"values.{0}".format(timestamp.hour): hour_average,
+        update_action = {'$set': {"values.{0}".format(timestamp.minute): hour_average,
                                   'type': data_type},
                          '$inc': {'entries': 1, 'total': hour_average}}
-        print "sending hour stats to rabbit"
+        print "Sending: hourly stats for host: {0}, minute: {1}".format(hostname, timestamp.minute)
         tasks.update_hour_stat.delay(update_predicate, update_action)
 
         # update the available metric names for this host
